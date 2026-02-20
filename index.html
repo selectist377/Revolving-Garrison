@@ -1,0 +1,395 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>旋驻棋 (Revolving Garrison) - 官方版</title>
+    <style>
+        :root { 
+            --bg: #f4f7f6; --panel: #ffffff; --accent: #2c3e50; --red-p: #c0392b; 
+            --black-p: #2c3e50; --cell-light: #f9f9f9; --cell-dark: #d1d8e0;
+            --cell-size: 50px; 
+        }
+        body { background: var(--bg); color: #333; font-family: 'PingFang SC', sans-serif; display: flex; flex-direction: column; align-items: center; margin: 0; padding: 10px; }
+        .main-layout { display: flex; gap: 15px; flex-wrap: wrap; justify-content: center; align-items: flex-start; }
+        
+        .sidebar { width: 260px; background: var(--panel); padding: 15px; border-radius: 12px; border: 1px solid #ddd; box-shadow: 0 4px 10px rgba(0,0,0,0.05); }
+        .faction-tag { display: flex; justify-content: space-between; padding: 8px; border-radius: 6px; font-size: 13px; font-weight: bold; border: 2px solid transparent; opacity: 0.4; margin-bottom: 5px; }
+        .faction-tag.active { opacity: 1; transform: scale(1.02); border-color: gold; }
+        .tag-red { color: #fff; background: var(--red-p); }
+        .tag-black { color: #fff; background: var(--black-p); }
+
+        .board-container { padding: 10px; background: #34495e; border-radius: 8px; }
+        .board { display: grid; grid-template-columns: repeat(8, var(--cell-size)); border: 3px solid #2c3e50; }
+        .cell { width: var(--cell-size); height: var(--cell-size); display: flex; align-items: center; justify-content: center; cursor: pointer; position: relative; }
+        .cell.red-axis { background-color: #e6b0aa !important; box-shadow: inset 0 0 8px #c0392b; }
+        .cell.black-axis { background-color: #aeb6bf !important; box-shadow: inset 0 0 8px #2c3e50; }
+        .cell.void { background: #2c3e50 !important; cursor: not-allowed; }
+        .cell.highlight { background: #58d68d !important; z-index: 5; }
+        
+        .piece { width: 85%; height: 85%; border-radius: 4px; display: flex; flex-direction: column; align-items: center; justify-content: center; font-weight: bold; z-index: 2; transition: all 0.2s; }
+        .piece.side-p1 { border: 2px solid #fff; box-shadow: 0 4px 8px rgba(0,0,0,0.3), inset 0 0 5px rgba(255,255,255,0.5); }
+        .piece.side-p2 { border: 2px dashed #000; box-shadow: 0 0 10px rgba(0,0,0,0.5); }
+        .piece.red { background: linear-gradient(135deg, #e74c3c, #c0392b); color: white; }
+        .piece.black { background: linear-gradient(135deg, #5d6d7e, #2c3e50); color: white; }
+        .piece.anchored { border: 3px solid #f1c40f !important; box-shadow: 0 0 15px #f1c40f !important; }
+        
+        .hand-area { margin-top: 10px; padding: 8px; background: #f8f9fa; border-radius: 8px; border: 1px solid #eee; }
+        .cards-row { display: flex; gap: 4px; height: 55px; }
+        .card { width: 38px; height: 52px; background: white; border-radius: 4px; display: flex; flex-direction: column; align-items: center; justify-content: center; font-weight: bold; cursor: pointer; border: 1px solid #ccc; font-size: 0.8em; }
+        .card.selected { border: 2px solid #3498db; transform: translateY(-3px); }
+        
+        .right-section { display: flex; flex-direction: column; gap: 10px; }
+        .panel { width: 240px; background: #fff; border-radius: 8px; border: 1px solid #ddd; display: flex; flex-direction: column; overflow: hidden; }
+        .panel-header { padding: 8px; font-size: 12px; background: #2c3e50; color: #fff; font-weight: bold; }
+        .scroll-list { flex: 1; overflow-y: auto; padding: 8px; font-size: 11px; height: 180px; }
+        .log-item { border-bottom: 1px solid #eee; padding: 4px 0; cursor: help; }
+        .cmt-item { margin-bottom: 6px; border-left: 2px solid #3498db; padding-left: 5px; }
+        .cmt-user { font-weight: bold; color: #2980b9; font-size: 10px; }
+        
+        button { cursor: pointer; border: none; border-radius: 4px; font-weight: bold; }
+        .btn-mode { width: 48%; padding: 5px; background: #eee; }
+        .btn-mode.active { background: #3498db; color: #fff; }
+
+        #rule-modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.85); z-index: 9999; justify-content: center; align-items: center; }
+        .rule-content { background: white; width: 90%; max-width: 600px; max-height: 85vh; border-radius: 12px; overflow-y: auto; padding: 30px; position: relative; line-height: 1.6; }
+        .rule-content h2 { border-bottom: 2px solid var(--accent); padding-bottom: 10px; margin-top: 0; }
+        .rule-content h3 { color: var(--red-p); margin-top: 20px; }
+        .rule-content b { color: var(--accent); }
+        .close-btn { position: sticky; bottom: -10px; width: 100%; padding: 12px; background: var(--accent); color: white; border: none; border-radius: 6px; margin-top: 20px; box-shadow: 0 -5px 15px rgba(255,255,255,0.8); }
+    </style>
+</head>
+<body>
+
+    <div id="rule-modal">
+        <div class="rule-content">
+            <h2>旋驻棋 (Revolving Garrison) 官方规则书</h2>
+            <h3>一、 战场构筑：几何棋盘与双轴驻线</h3>
+            <p>游戏在标准 8×8 棋盘上进行，改以“环”与“轴”的逻辑观察棋盘。</p>
+            <p><b>1. 双轴驻线:</b> <br>
+            - <b>红方驻线主轴 (Red Axis):</b> A8 至 H1 对角线。<br>
+            - <b>黑方驻线副轴 (Black Axis):</b> A1 至 H8 对角线。<br>
+            - <b>禁区 (The Void):</b> 中心 2×2 区域（D4-E5）严禁直接落子。</p>
+            <p><b>2. 四重旋宫:</b> 棋盘被视为由内向外的四层轨道：第一旋宫(禁区4格)至第四旋宫(外围28格)。</p>
+            <h3>二、 核心流程：布阵与旋移</h3>
+            <p>双方各自行动一回合计做一轮，每轮结束后，红黑方身份互换。</p>
+            <p><b>阶段 A：落子布阵:</b> 摸牌至4张，双方交替放置手牌。空位法则下不能放进禁区；遵循镜像禁止机制。</p>
+            <p><b>阶段 B：自动旋移:</b> 落子完成后，所有棋子沿其轨道<b>顺时针移动 2 格</b>。</p>
+            <h3>三、 战术进阶：重构移动</h3>
+            <p>每 3 轮结束后插入特殊轮。不落子，改选一张未移动过的“要塞牌”执行以下移动：</p>
+            <p>1. <b>马 (Knight):</b> “日”字跳跃。<br>
+               2. <b>相 (Bishop):</b> 斜向移动 1-2 格。<br>
+               3. <b>车 (Rook):</b> 横纵移动 1-2 格。</p>
+            <h3>四、 胜负判定：共振与压制</h3>
+            <p><b>1. 瞬时绝杀:</b> <br>
+            - <b>共振平衡 (Resonance):</b> 驻线上红牌总点数 = 黑牌总点数（不为0），该轴所属方获胜。<br>
+            - <b>绝对压制 (Overpower):</b> 驻线上点数总和 ≥ 45，该方获胜。</p>
+            <p><b>2. 终局结算:</b> 若牌堆耗尽，计算驻线点数和（A=1, J=11, Q=12, K=13）。</p>
+            <button class="close-btn" onclick="toggleRules(false)">确认并返回战场</button>
+        </div>
+    </div>
+
+    <div class="game-header" style="text-align:center;"><h1>旋驻棋 (Revolving Garrison)</h1></div>
+    <div class="main-layout">
+        <div class="sidebar">
+            <div id="status-banner" style="padding: 10px; text-align: center; border-radius: 4px; font-weight: bold; background: #2c3e50; color: #fff; margin-bottom: 10px;">选择模式开始</div>
+            <div style="display:flex; justify-content: space-between; margin-bottom: 10px;">
+                <button class="btn-mode active" id="mode-pve" onclick="switchMode('pve')">人机模式</button>
+                <button class="btn-mode" id="mode-pvp" onclick="switchMode('pvp')">双人模式</button>
+            </div>
+            <div class="faction-box">
+                <div id="faction-p1" class="faction-tag tag-red"><span>P1 (白框)</span><span id="p1-color-label">红轴方</span></div>
+                <div id="faction-p2" class="faction-tag tag-black"><span>P2 (黑框)</span><span id="p2-color-label">黑轴方</span></div>
+            </div>
+            <div style="background: #fff; padding: 8px; border-radius: 8px; border: 1px solid #ddd; font-size: 12px;">
+                <div style="color:var(--red-p)">红轴点数: <span id="sc-red">0</span></div>
+                <div style="color:var(--black-p)">黑轴点数: <span id="sc-black">0</span></div>
+                <div>轮次: <span id="round-idx">1</span> <span id="round-type" style="color:orange"></span></div>
+            </div>
+            <div class="hand-area"><div>P1 手牌</div><div class="cards-row" id="p1-hand"></div></div>
+            <div class="hand-area"><div id="p2-hand-label">AI 手牌</div><div class="cards-row" id="p2-hand"></div></div>
+            <div id="recon-menu" style="display:none; margin-top:8px; border:2px solid #f1c40f; padding:5px; border-radius:8px; justify-content: space-around;">
+                <button onclick="setRecon('N')">马</button><button onclick="setRecon('B')">相</button><button onclick="setRecon('R')">车</button>
+            </div>
+            <button style="background:#2ecc71; color:#fff; width:100%; margin-top:10px; padding:10px;" id="start-btn" onclick="initGame()">开始对局</button>
+            <button style="background:#3498db; color:#fff; width:100%; margin-top:5px; padding:10px;" onclick="toggleRules(true)">查看规则书</button>
+            <button style="background:#bdc3c7; width:100%; margin-top:5px; padding:5px;" onclick="safeReset()">重置</button>
+        </div>
+        <div class="board-container">
+            <div class="board" id="board"></div>
+            <div style="color:#fff; font-size:10px; margin-top:5px; opacity:0.7;">* 点击行动记录可查看当轮具体变动</div>
+        </div>
+        <div class="right-section">
+            <div class="panel">
+                <div class="panel-header">📜 行动记录仪 (悬停回溯)</div>
+                <div class="scroll-list" id="log-list"></div>
+            </div>
+            <div class="panel">
+                <div class="panel-header">💬 实时评论区</div>
+                <div class="scroll-list" id="cmt-list"></div>
+            </div>
+        </div>
+    </div>
+
+<script>
+    const RINGS = [
+        [[3,3],[3,4],[4,4],[4,3]],
+        [[2,2],[2,3],[2,4],[2,5],[3,5],[4,5],[5,5],[5,4],[5,3],[5,2],[4,2],[3,2]],
+        [[1,1],[1,2],[1,3],[1,4],[1,5],[1,6],[2,6],[3,6],[4,6],[5,6],[6,6],[6,5],[6,4],[6,3],[6,2],[6,1],[5,1],[4,1],[3,1],[2,1]],
+        [[0,0],[0,1],[0,2],[0,3],[0,4],[0,5],[0,6],[0,7],[1,7],[2,7],[3,7],[4,7],[5,7],[6,7],[7,7],[7,6],[7,5],[7,4],[7,3],[7,2],[7,1],[7,0],[6,0],[5,0],[4,0],[3,0],[2,0],[1,0]]
+    ];
+
+    const CHARS = [
+        {name:"黑白侦探", quotes:["我们总能在旋转中找到最佳策略。", "精心设计的陷阱近在眼前。"]},
+        {name:"胜率预测机", quotes:["我觉得相反的策略才是制胜之道。", "也许下一秒，你就能翻云覆雨。"]},
+        {name:"乐子学家", quotes:["哈哈，你果然上当咯。", "博弈总是充满乐趣，不是吗？"]},
+        {name:"深渊守望者", quotes:["愚蠢挺有意思，不是吗？", "随便选一张吧，我不在乎。"]},
+        {name:"战术导师", quotes:["掌握好旋转的奥秘才是精髓。", "你的冷静实在有些吓人。"]},
+        {name:"优雅公爵", quotes:["亲爱的，你准备好获奖感言了吗？", "放轻松，我相信你会赢。"]},
+        {name:"热血棋士", quotes:["我觉得你能行，自信是你的魅力。", "失败是成功之母，再接再厉。"]}
+    ];
+
+    let G = {};
+
+    function toggleRules(show) {
+        document.getElementById('rule-modal').style.display = show ? 'flex' : 'none';
+    }
+
+    function safeReset() {
+        G = { 
+            active:false, mode:'pve', round:1, turn:'p1', p1Color:'red', isRecon:false, 
+            board:Array(8).fill(null).map(()=>Array(8).fill(null)), 
+            p1Hand:[], p2Hand:[], deck:[], selIdx:null, reconMode:null, selPiece:null 
+        };
+        document.getElementById('log-list').innerHTML = '';
+        document.getElementById('cmt-list').innerHTML = '';
+        document.getElementById('start-btn').style.display = 'block';
+        document.getElementById('sc-red').innerText = '0';
+        document.getElementById('sc-black').innerText = '0';
+        document.getElementById('status-banner').innerText = '选择模式开始';
+        document.getElementById('status-banner').style.background = '#2c3e50';
+        switchMode(G.mode);
+        render();
+    }
+
+    function switchMode(m) {
+        if(G.active) return;
+        G.mode = m;
+        document.getElementById('mode-pve').classList.toggle('active', m==='pve');
+        document.getElementById('mode-pvp').classList.toggle('active', m==='pvp');
+        document.getElementById('p2-hand-label').innerText = m==='pve' ? 'AI 手牌' : 'P2 手牌';
+    }
+
+    function addLog(msg) {
+        const list = document.getElementById('log-list');
+        const div = document.createElement('div');
+        div.className = 'log-item';
+        div.innerHTML = `[轮${G.round}] ${msg}`;
+        list.prepend(div);
+    }
+
+    function addCmt() {
+        const list = document.getElementById('cmt-list');
+        const char = CHARS[Math.floor(Math.random()*CHARS.length)];
+        const div = document.createElement('div');
+        div.className = 'cmt-item';
+        div.innerHTML = `<span class="cmt-user">${char.name}</span> ${char.quotes[Math.floor(Math.random()*char.quotes.length)]}`;
+        list.prepend(div);
+    }
+
+    function createDeck() {
+        const vs=['A','2','3','4','5','6','7','8','9','10','J','Q','K'], ss=['♥','♦','♠','♣'];
+        let d = [];
+        for(let s of ss) for(let v of vs) d.push({val:v, suit:s, pts:v==='A'?1:v==='J'?11:v==='Q'?12:v==='K'?13:parseInt(v), isRed:(s==='♥'||s==='♦')});
+        for(let i=d.length-1; i>0; i--) { const j=Math.floor(Math.random()*(i+1)); [d[i], d[j]] = [d[j], d[i]]; }
+        return d;
+    }
+
+    function initGame() {
+        G.deck = createDeck(); G.active = true;
+        for(let i=0; i<4; i++) { G.p1Hand.push(G.deck.pop()); G.p2Hand.push(G.deck.pop()); }
+        document.getElementById('start-btn').style.display = 'none';
+        addLog("对局开始");
+        render();
+    }
+
+    function handleCell(r,c) {
+        if(!G.active || (G.mode==='pve' && G.turn==='p2')) return;
+        const curHand = G.turn==='p1' ? G.p1Hand : G.p2Hand;
+        const who = G.turn==='p1' ? "P1" : "P2";
+        if(G.isRecon) {
+            const p = G.board[r][c];
+            if(p && p.side === G.turn && !p.anchored) { G.selPiece={r,c}; render(); }
+            else if(G.selPiece && G.reconMode) {
+                if(getTargets(G.selPiece.r, G.selPiece.c, G.reconMode).some(t=>t[0]===r && t[1]===c)) {
+                    G.board[r][c] = {...G.board[G.selPiece.r][G.selPiece.c], anchored:true};
+                    G.board[G.selPiece.r][G.selPiece.c] = null;
+                    addLog(`${who} 重构移动至 (${r},${c})`);
+                    finishSubTurn();
+                }
+            }
+        } else {
+            if(G.selIdx===null || G.board[r][c] || (r>=3&&r<=4&&c>=3&&c<=4)) return;
+            const card = curHand.splice(G.selIdx,1)[0];
+            G.board[r][c] = {...card, side:G.turn, color:card.isRed?'red':'black'}; 
+            addLog(`${who} 在 (${r},${c}) 放置了 ${card.val}${card.suit}`);
+            G.selIdx = null;
+            addCmt();
+            if(G.mode === 'pve') { G.turn = 'p2'; setTimeout(aiPlay, 800); }
+            else { 
+                if(G.turn === 'p2') { G.turn = 'p1'; setTimeout(rotateAndFlow, 500); }
+                else { G.turn = 'p2'; render(); }
+            }
+        }
+        render();
+    }
+
+    function aiPlay() {
+        if(!G.active) return;
+        if(G.isRecon) {
+            let pieces = [];
+            for(let r=0; r<8; r++) for(let c=0; c<8; c++) {
+                let p=G.board[r][c]; if(p && p.side==='p2' && !p.anchored) pieces.push({r,c});
+            }
+            if(pieces.length > 0) {
+                let p = pieces[0]; let ts = getTargets(p.r, p.c, 'R');
+                if(ts.length > 0) { G.board[ts[0][0]][ts[0][1]] = {...G.board[p.r][p.c], anchored:true}; G.board[p.r][p.c] = null; }
+            }
+            finishSubTurn();
+        } else {
+            let spots = [];
+            for(let r=0; r<8; r++) for(let c=0; c<8; c++) if(!G.board[r][c] && !(r>=3&&r<=4&&c>=3&&c<=4)) spots.push({r,c});
+            if(spots.length > 0) {
+                let s = spots[Math.floor(Math.random()*spots.length)];
+                let card = G.p2Hand.splice(0, 1)[0];
+                G.board[s.r][s.c] = {...card, side:'p2', color:card.isRed?'red':'black'};
+                addLog(`AI 在 (${s.r},${s.c}) 放置了 ${card.val}${card.suit}`);
+                G.turn = 'p1'; setTimeout(rotateAndFlow, 500);
+            }
+        }
+        render();
+    }
+
+    function rotateAndFlow() {
+        let nb = Array(8).fill(null).map(()=>Array(8).fill(null));
+        RINGS.forEach(ring => {
+            ring.forEach((pos, i) => {
+                const p = G.board[pos[0]][pos[1]];
+                if(p) { const n = ring[(i+2)%ring.length]; nb[n[0]][n[1]] = p; }
+            });
+        });
+        G.board = nb;
+        while(G.p1Hand.length<4 && G.deck.length>0) G.p1Hand.push(G.deck.pop());
+        while(G.p2Hand.length<4 && G.deck.length>0) G.p2Hand.push(G.deck.pop());
+        checkWin();
+        if(G.active) {
+            G.round++; G.p1Color = (G.p1Color==='red'?'black':'red');
+            G.isRecon = (G.round % 4 === 0);
+        }
+        render();
+    }
+
+    function checkWin() {
+        let rs_r=0, rs_b=0, bs_r=0, bs_b=0;
+        for(let r=0; r<8; r++) for(let c=0; c<8; c++) {
+            let p=G.board[r][c]; if(!p) continue;
+            if(r+c===7) { if(p.color==='red') rs_r+=p.pts; else rs_b+=p.pts; }
+            if(r===c) { if(p.color==='red') bs_r+=p.pts; else bs_b+=p.pts; }
+        }
+        const rTotal = rs_r + rs_b;
+        const bTotal = bs_r + bs_b;
+        document.getElementById('sc-red').innerText = rTotal;
+        document.getElementById('sc-black').innerText = bTotal;
+
+        let winMsg = "";
+        if(rTotal >= 45) winMsg = "红轴达成：绝对压制！红方胜！";
+        else if(rs_r === rs_b && rs_r > 0) winMsg = "红轴达成：共振平衡！红方胜！";
+        else if(bTotal >= 45) winMsg = "黑轴达成：绝对压制！黑方胜！";
+        else if(bs_r === bs_b && bs_r > 0) winMsg = "黑轴达成：共振平衡！黑方胜！";
+        else if(G.deck.length === 0 && G.p1Hand.length === 0 && G.p2Hand.length === 0) {
+            if(rTotal > bTotal) winMsg = "牌堆枯竭：红轴点数领先！红方胜！";
+            else if(bTotal > rTotal) winMsg = "牌堆枯竭：黑轴点数领先！黑方胜！";
+            else winMsg = "牌堆枯竭：双方平分秋色！平局！";
+        }
+
+        if(winMsg) {
+            G.active = false;
+            const banner = document.getElementById('status-banner');
+            banner.innerText = winMsg;
+            banner.style.background = "#f1c40f";
+            banner.style.color = "#000";
+            addLog("游戏结束: " + winMsg);
+            alert(winMsg);
+        }
+    }
+
+    function finishSubTurn() {
+        G.selPiece = null; G.reconMode = null;
+        if(G.turn === 'p1') { G.turn = 'p2'; if(G.mode==='pve') setTimeout(aiPlay, 500); else render(); }
+        else { G.isRecon = false; G.turn = 'p1'; render(); }
+    }
+
+    function getTargets(r,c,m) {
+        const res = [];
+        const ds = {'N':[[2,1],[2,-1],[-2,1],[-2,-1],[1,2],[1,-2],[-1,2],[-1,-2]], 'B':[[1,1],[1,-1],[-1,1],[-1,-1],[2,2],[2,-2],[-2,2],[-2,-2]], 'R':[[1,0],[-1,0],[0,1],[0,-1],[2,0],[-2,0],[0,2],[0,-2]]}[m];
+        ds.forEach(d => { let nr=r+d[0], nc=c+d[1]; if(nr>=0 && nr<8 && nc>=0 && nc<8 && !G.board[nr][nc]) res.push([nr,nc]); });
+        return res;
+    }
+
+    function render() {
+        const b = document.getElementById('board'); b.innerHTML='';
+        const p1Active = G.turn==='p1';
+        const p2Active = G.turn==='p2';
+        
+        // 更新侧边栏标签颜色和文字内容
+        const p1Tag = document.getElementById('faction-p1');
+        const p2Tag = document.getElementById('faction-p2');
+        p1Tag.className = `faction-tag tag-${G.p1Color} ${p1Active?'active':''}`;
+        p2Tag.className = `faction-tag tag-${G.p1Color==='red'?'black':'red'} ${p2Active?'active':''}`;
+        
+        document.getElementById('p1-color-label').innerText = G.p1Color === 'red' ? '红轴方' : '黑轴方';
+        document.getElementById('p2-color-label').innerText = G.p1Color === 'red' ? '黑轴方' : '红轴方';
+
+        for(let r=0; r<8; r++) {
+            for(let c=0; c<8; c++) {
+                const d = document.createElement('div');
+                const isRedAx = (r+c===7), isBlkAx = (r===c);
+                d.className = `cell ${r>=3&&r<=4&&c>=3&&c<=4?'void':''} ${isRedAx?'red-axis':''} ${isBlkAx?'black-axis':''}`;
+                if(!isRedAx && !isBlkAx) d.style.backgroundColor = ((r+c)%2===0)?'var(--cell-dark)':'var(--cell-light)';
+                d.onclick = () => handleCell(r,c);
+                if(G.selPiece && G.reconMode && getTargets(G.selPiece.r,G.selPiece.c,G.reconMode).some(t=>t[0]===r&&t[1]===c)) d.classList.add('highlight');
+                const p = G.board[r][c];
+                if(p) {
+                    let pe = document.createElement('div'); 
+                    pe.className = `piece ${p.color} ${p.side === 'p1' ? 'side-p1' : 'side-p2'} ${p.anchored?'anchored':''}`;
+                    pe.innerHTML = `<span>${p.val}</span><span>${p.suit}</span>`;
+                    d.appendChild(pe);
+                }
+                b.appendChild(d);
+            }
+        }
+        renderH('p1-hand', G.p1Hand, p1Active && !G.isRecon, false);
+        renderH('p2-hand', G.p2Hand, p2Active && !G.isRecon, G.mode==='pve');
+        if(G.active) {
+            document.getElementById('status-banner').innerText = G.isRecon ? "重构阶段" : (G.turn==='p1'?"P1回合":"P2/AI回合");
+        }
+        document.getElementById('round-idx').innerText = G.round;
+        document.getElementById('recon-menu').style.display = G.isRecon ? 'flex' : 'none';
+    }
+
+    function renderH(id, h, act, hide) {
+        const r = document.getElementById(id); r.innerHTML='';
+        if(!h) return;
+        h.forEach((c, i) => {
+            const d = document.createElement('div');
+            d.className = `card ${act && G.selIdx===i ? 'selected' : ''}`;
+            d.innerHTML = `<div>${hide?'?':c.val}</div><div style="color:${!hide&&c.isRed?'red':'black'}">${hide?'?':c.suit}</div>`;
+            d.onclick = () => { if(act) { G.selIdx=i; render(); } };
+            r.appendChild(d);
+        });
+    }
+    function setRecon(m) { G.reconMode=m; render(); }
+    safeReset();
+</script>
+</body>
+</html>
